@@ -1,76 +1,35 @@
-fst
-===
-This crate provides a fast implementation of ordered sets and maps using finite
-state machines. In particular, it makes use of finite state transducers to map
-keys to values as the machine is executed. Using finite state machines as data
-structures enables us to store keys in a compact format that is also easily
-searchable. For example, this crate leverages memory maps to make range queries
-very fast.
+An answer to https://github.com/BurntSushi/fst/issues/160#issuecomment-3490618999
+since Andrew Gallant asked for it (after blocking me, ensuring that my answer can't be posted in his issue tracker):
 
-Check out my blog post
-[Index 1,600,000,000 Keys with Automata and
-Rust](https://blog.burntsushi.net/transducers/)
-for extensive background, examples and experiments.
+> [@ssvb](https://github.com/ssvb) what are you hoping to achieve here? I find _your_ statement strange. Notice what I said:
+> 
+> > There may indeed be bugs there.
 
-[![Build status](https://github.com/BurntSushi/fst/workflows/ci/badge.svg)](https://github.com/BurntSushi/fst/actions)
-[![](https://meritbadge.herokuapp.com/fst)](https://crates.io/crates/fst)
+"may" is just not the right choice of word. At least one bug is definitely there. And that's been known since 2017: https://github.com/BurntSushi/fst/issues/38
 
-Dual-licensed under MIT or the [UNLICENSE](https://unlicense.org/).
+Also see https://github.com/Automattic/harper/issues/138#issuecomment-2395298888 for a workaround that people seem to be using (but I haven't tested it myself yet). The `fst-bin` command line tool can probably also take it into use as a quick solution.
 
+> > I personally do not have any time in the short term to look into those bugs. The Levenshtein code was something I whipped together several years ago, and it has not seen much love since then.
 
-### Documentation
+Just for the record. I'm not urging you to do anything. And I don't blame you. I'm just trying to confirm that we both realistically understand the current state of affairs.
 
-https://docs.rs/fst
+> I do [see one Unicode test](https://github.com/BurntSushi/fst/blob/5907b4739793b3d5d7061eaa3f85274e09769d6a/tests/test.rs#L45).
 
-The
-[`regex-automata`](https://docs.rs/regex-automata)
-crate provides implementations of the `fst::Automata` trait when its
-`transducer` feature is enabled. This permits using DFAs compiled by
-`regex-automata` to search finite state transducers produced by this crate.
+Thanks for a constructive feedback. Based on what I can see there, this is just a single test, which certainly doesn't provide enough coverage, and the chosen word even does not share a common prefix/suffix with the other words from the set. Moreover, it doesn't represent real world UTF-8 data, which tends to have many multi-byte UTF-8 characters used back-to-back.
 
-
-### Installation
-
-Simply add a corresponding entry to your `Cargo.toml` dependency list:
-
-```toml,ignore
-[dependencies]
-fst = "0.4"
+Here's the UTF-8 counterpart of `levenshtein_simple` with Greek words:
 ```
-
-
-### Example
-
-This example demonstrates building a set in memory and executing a fuzzy query
-against it. You'll need `fst = "0.4"` with the `levenshtein` feature enabled in
-your `Cargo.toml`.
-
-```rust
-use fst::{IntoStreamer, Set};
-use fst::automaton::Levenshtein;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-  // A convenient way to create sets in memory.
-  let keys = vec!["fa", "fo", "fob", "focus", "foo", "food", "foul"];
-  let set = Set::from_iter(keys)?;
-
-  // Build our fuzzy query.
-  let lev = Levenshtein::new("foo", 1)?;
-
-  // Apply our fuzzy query to the set we built.
-  let stream = set.search(lev).into_stream();
-
-  let keys = stream.into_strs()?;
-  assert_eq!(keys, vec!["fo", "fob", "foo", "food"]);
-  Ok(())
+#[cfg(feature = "levenshtein")]
+#[test]
+fn levenshtein_simple_unicode() {
+    let set = fst_set(vec!["Ἄγγελος", "Ἄγγελοι", "banana"]);
+    let q = Levenshtein::new("Ἄγγελοα", 1).unwrap();
+    let vs = set.search(&q).into_stream().into_byte_keys();
+    assert_eq!(vs, vec!["Ἄγγελος".as_bytes(), "Ἄγγελοι".as_bytes()]);
 }
 ```
+And it fails `cargo test --all-features`.
 
-Check out the documentation for a lot more examples!
+> Folks are welcome to take a dive into the Levenshtein automata code and see if they can fix it. PRs are welcome.
 
-
-### Cargo features
-
-* `levenshtein` - **Disabled** by default. This adds the `Levenshtein`
-  automaton to the `automaton` sub-module. This includes an additional
-  dependency on `utf8-ranges`.
+Do you mean that a PR for fixing strictly this bug and nothing else is welcome? Because PRs generally tend to be left ignored (and again, I'm not blaming you for that, just trying to confirm the current state of affairs): https://github.com/BurntSushi/fst/pulls
